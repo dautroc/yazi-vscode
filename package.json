@@ -2,8 +2,8 @@
   "name": "yazi-vscode",
   "displayName": "Yazi VSCode",
   "description": "Native integration of Yazi directly in a VSCode window",
-  "version": "0.1.15",
-  "publisher": "loi-nguyen",
+  "version": "1.0.1",
+  "publisher": "dautroc",
   "engines": {
     "vscode": "^1.85.0"
   },

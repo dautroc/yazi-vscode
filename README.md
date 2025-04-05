@@ -7,29 +7,6 @@ Native integration of Yazi directly in a VSCode window (not an integrated termin
 - Toggle Yazi in the full-screen editor within VSCode
 - Use a keyboard shortcut to quickly open or close Yazi
 
-## Installation
-
-### From Source
-
-1. Clone this repository
-2. Install dependencies:
-   ```
-   npm install
-   ```
-3. Build the extension:
-   ```
-   npm run compile
-   ```
-4. Package the extension:
-   ```
-   npm install -g @vscode/vsce
-   vsce package
-   ```
-5. Install from VSIX:
-   - In VS Code, go to Extensions view
-   - Click "..." menu (top-right) → "Install from VSIX..."
-   - Select the generated .vsix file
-
 ## Requirements
 
 - Yazi must be installed on your system and accessible in your PATH (or set with `yazi-vscode.yaziPath`). You can find installation instructions for Yazi [here](https://github.com/sxyazi/yazi#installation).
