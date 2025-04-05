@@ -144,14 +144,16 @@ async function createWindow() {
 
     // Get the directory of the active file if available
     let cwd = os.homedir();
+    let activeFilePath = "";
     
     // Check for active editor first
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
-      const activeFilePath = activeEditor.document.uri.fsPath;
+      const filePath = activeEditor.document.uri.fsPath;
       // Get the directory containing the file
-      if (activeFilePath) {
-        cwd = path.dirname(activeFilePath);
+      if (filePath) {
+        cwd = path.dirname(filePath);
+        activeFilePath = filePath;
       }
     } 
     // Fallback to workspace folder if no active file
@@ -166,6 +168,11 @@ async function createWindow() {
     let yaziCommand = globalConfig.yaziPath;
     if (globalConfig.configPath) {
       yaziCommand += ` --config-file="${globalConfig.configPath}"`;
+    }
+    
+    // Add the active file as an argument to Yazi
+    if (activeFilePath) {
+      yaziCommand += ` "${activeFilePath}"`;
     }
 
     const env: { [key: string]: string } = {};
