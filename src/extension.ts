@@ -4,129 +4,26 @@ import * as os from "os";
 import * as path from "path";
 import * as process from "process";
 import { exec } from "child_process";
-import assert = require("assert");
 
 let yaziTerminal: vscode.Terminal | undefined;
-let globalConfig: YaziConfig;
-let globalConfigJSON: string;
-
-/* --- Config --- */
-
-type PanelBehavior = "keep" | "hide" | "hideRestore";
-
-interface PanelOptions {
-  sidebar: PanelBehavior;
-  panel: PanelBehavior;
-  secondarySidebar: PanelBehavior;
-}
-
-interface YaziConfig {
-  yaziPath: string;
-  configPath: string;
-  autoMaximizeWindow: boolean;
-  panels: PanelOptions;
-}
-
-function loadConfig(): YaziConfig {
-  const config = vscode.workspace.getConfiguration("yazi-vscode");
-
-  // Helper function for getting panel behavior with legacy fallback
-  function getPanelBehavior(panelName: string): PanelBehavior {
-    const defaultValue = panelName === "secondarySidebar" ? "hide" : "keep";
-    const newSetting = config.get<PanelBehavior>(
-      `panels.${panelName}`,
-      defaultValue
-    );
-    if (newSetting !== defaultValue) return newSetting;
-
-    // Legacy fallbacks for published settings
-    if (panelName === "sidebar") {
-      return config.get<boolean>("autoHideSideBar", false) ? "hide" : "keep";
-    } else if (panelName === "panel") {
-      return config.get<boolean>("autoHidePanel", false) ? "hide" : "keep";
-    }
-
-    return defaultValue;
-  }
-
-  return {
-    yaziPath: config.get<string>("yaziPath", ""),
-    configPath: config.get<string>("configPath", ""),
-    autoMaximizeWindow: config.get<boolean>("autoMaximizeWindow", false),
-    panels: {
-      sidebar: getPanelBehavior("sidebar"),
-      panel: getPanelBehavior("panel"),
-      secondarySidebar: getPanelBehavior("secondarySidebar"),
-    },
-  };
-}
-
-async function reloadIfConfigChange() {
-  const currentConfig = loadConfig();
-  if (JSON.stringify(currentConfig) !== globalConfigJSON) {
-    await loadExtension();
-  }
-}
-
-async function loadExtension() {
-  globalConfig = loadConfig();
-  globalConfigJSON = JSON.stringify(globalConfig);
-
-  if (globalConfig.configPath) {
-    globalConfig.configPath = expandPath(globalConfig.configPath);
-  }
-
-  // Validate yaziPath
-  if (globalConfig.yaziPath) {
-    globalConfig.yaziPath = expandPath(globalConfig.yaziPath);
-  } else {
-    try {
-      globalConfig.yaziPath = await findExecutableOnPath("yazi");
-    } catch (error) {
-      vscode.window.showErrorMessage(
-        "Yazi not found in config or on PATH. Please check your settings."
-      );
-    }
-  }
-
-  if (!fs.existsSync(globalConfig.yaziPath)) {
-    vscode.window.showErrorMessage(
-      `Yazi not found at ${globalConfig.yaziPath}. Please check your settings.`
-    );
-  }
-
-  if (globalConfig.configPath && !fs.existsSync(globalConfig.configPath)) {
-    vscode.window.showWarningMessage(
-      `Custom config file not found at ${globalConfig.configPath}. The default config will be used.`
-    );
-    globalConfig.configPath = "";
-  }
-}
 
 /* --- Events --- */
 
 export async function activate(context: vscode.ExtensionContext) {
-  // Initialize configuration on activation
-  await loadExtension();
-
   let disposable = vscode.commands.registerCommand(
     "yazi-vscode.toggle",
     async () => {
       if (yaziTerminal) {
-        if (windowFocused()) {
-          closeWindow();
-          onHide();
+        if (isYaziTerminalFocused()) {
+          closeYaziTerminal();
         } else {
-          focusWindow();
-          onShown();
+          // Always restart Yazi to ensure it focuses on current active file
+          yaziTerminal.dispose();
+          yaziTerminal = undefined;
+          await openYaziTerminal();
         }
       } else {
-        try {
-          await createWindow();
-          onShown();
-        } catch (error) {
-          vscode.window.showErrorMessage(`Failed to open Yazi: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        await openYaziTerminal();
       }
     }
   );
@@ -136,12 +33,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {}
 
-/* ---  Window --- */
+/* --- Terminal Management --- */
 
-async function createWindow() {
+async function openYaziTerminal() {
   try {
-    await reloadIfConfigChange();
-
+    // Get the Yazi path
+    const yaziPath = await findYaziExecutable();
+    
     // Get the directory of the active file if available
     let cwd = os.homedir();
     let activeFilePath = "";
@@ -161,30 +59,15 @@ async function createWindow() {
       cwd = vscode.workspace.workspaceFolders[0].uri.fsPath;
     }
 
-    if (!globalConfig.yaziPath) {
-      throw new Error("Yazi path is not defined. Please check your settings.");
-    }
-
-    let yaziCommand = globalConfig.yaziPath;
-    if (globalConfig.configPath) {
-      yaziCommand += ` --config-file="${globalConfig.configPath}"`;
-    }
+    // Create the yazi command
+    let yaziCommand = yaziPath;
     
     // Add the active file as an argument to Yazi
     if (activeFilePath) {
       yaziCommand += ` "${activeFilePath}"`;
     }
 
-    const env: { [key: string]: string } = {};
-    try {
-      let codePath = await findExecutableOnPath("code");
-      env.PATH = `"${codePath}"${path.delimiter}${process.env.PATH}`;
-    } catch (error) {
-      vscode.window.showWarningMessage(
-        "Could not find 'code' on PATH. Opening vscode windows with editor commands may not work properly."
-      );
-    }
-
+    // Get the shell path
     let shellPath: string;
     try {
       shellPath = process.platform === "win32" 
@@ -195,11 +78,9 @@ async function createWindow() {
       shellPath = process.platform === "win32" 
         ? "powershell.exe" 
         : "/bin/sh";
-      vscode.window.showWarningMessage(
-        "Could not find bash. Using system shell as fallback."
-      );
     }
 
+    // Create the terminal
     yaziTerminal = vscode.window.createTerminal({
       name: "Yazi",
       cwd: cwd,
@@ -208,37 +89,51 @@ async function createWindow() {
         process.platform === "win32"
           ? ["/c", yaziCommand]
           : ["-c", yaziCommand],
-      location: vscode.TerminalLocation.Editor,
-      env: env,
+      location: vscode.TerminalLocation.Editor
     });
 
-    focusWindow();
+    yaziTerminal.show();
 
-    // yazi window closes, unlink and focus on editor (where yazi was)
+    // Handle terminal close
     vscode.window.onDidCloseTerminal((terminal) => {
       if (terminal === yaziTerminal) {
         yaziTerminal = undefined;
-        onHide();
       }
     });
   } catch (error) {
-    throw error; // Propagate to toggle command for proper error handling
+    vscode.window.showErrorMessage(`Failed to open Yazi: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function windowFocused(): boolean {
+async function findYaziExecutable(): Promise<string> {
+  // First check user configuration
+  const config = vscode.workspace.getConfiguration("yazi-vscode");
+  let configPath = config.get<string>("yaziPath", "");
+  
+  if (configPath) {
+    configPath = expandPath(configPath);
+    if (fs.existsSync(configPath)) {
+      return configPath;
+    }
+  }
+  
+  // Then try to find on PATH
+  try {
+    const yaziPath = await findExecutableOnPath("yazi");
+    return yaziPath;
+  } catch (error) {
+    throw new Error("Yazi not found in PATH. Please install Yazi or set the path in settings.");
+  }
+}
+
+function isYaziTerminalFocused(): boolean {
   return (
     vscode.window.activeTextEditor === undefined &&
     vscode.window.activeTerminal === yaziTerminal
   );
 }
 
-function focusWindow() {
-  assert(yaziTerminal, "yaziTerminal undefined when trying to show!");
-  yaziTerminal.show(false); // false: take focus
-}
-
-function closeWindow() {
+function closeYaziTerminal() {
   const openTabs = vscode.window.tabGroups.all.flatMap(
     (group) => group.tabs
   ).length;
@@ -250,63 +145,6 @@ function closeWindow() {
     vscode.commands.executeCommand(
       "workbench.action.openPreviousRecentlyUsedEditorInGroup"
     );
-  }
-}
-
-function onShown() {
-  const shouldKeep = (behavior: PanelBehavior) => behavior === "keep";
-  const shouldHide = (behavior: PanelBehavior) =>
-    behavior === "hide" || behavior === "hideRestore";
-
-  if (globalConfig.autoMaximizeWindow) {
-    vscode.commands.executeCommand(
-      "workbench.action.maximizeEditorHideSidebar"
-    );
-
-    // maximizeEditorHideSidebar closes both sidebars. If keep is true, we need to open them again.
-    if (shouldKeep(globalConfig.panels.sidebar)) {
-      vscode.commands.executeCommand(
-        "workbench.action.toggleSidebarVisibility"
-      );
-    }
-    if (shouldKeep(globalConfig.panels.secondarySidebar)) {
-      vscode.commands.executeCommand("workbench.action.toggleAuxiliaryBar");
-      setTimeout(() => {
-        vscode.commands.executeCommand(
-          "workbench.action.focusActiveEditorGroup"
-        );
-      }, 200);
-    }
-  } else {
-    // autoMaximizeWindow: false
-    if (shouldHide(globalConfig.panels.sidebar)) {
-      vscode.commands.executeCommand("workbench.action.closeSidebar");
-    }
-
-    if (shouldHide(globalConfig.panels.secondarySidebar)) {
-      vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar");
-    }
-  }
-
-  // Bottom panel not affected by autoMaximizeWindow
-  if (shouldHide(globalConfig.panels.panel)) {
-    vscode.commands.executeCommand("workbench.action.closePanel");
-  }
-}
-
-function onHide() {
-  const shouldRestore = (behavior: PanelBehavior) => behavior === "hideRestore";
-
-  if (shouldRestore(globalConfig.panels.sidebar)) {
-    vscode.commands.executeCommand("workbench.action.toggleSidebarVisibility");
-  }
-
-  if (shouldRestore(globalConfig.panels.panel)) {
-    vscode.commands.executeCommand("workbench.action.togglePanel");
-  }
-
-  if (shouldRestore(globalConfig.panels.secondarySidebar)) {
-    vscode.commands.executeCommand("workbench.action.toggleAuxiliaryBar");
   }
 }
 
