@@ -6,6 +6,8 @@ import * as process from "process";
 import { exec } from "child_process";
 
 let yaziTerminal: vscode.Terminal | undefined;
+// Track the active editor before opening Yazi
+let previousActiveFile: vscode.Uri | undefined;
 
 /* --- Events --- */
 
@@ -37,6 +39,12 @@ export function deactivate() {}
 
 async function openYaziTerminal() {
   try {
+    // Save the current active editor before opening Yazi
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+      previousActiveFile = activeEditor.document.uri;
+    }
+    
     // Get the Yazi path
     const yaziPath = await findYaziExecutable();
     
@@ -45,7 +53,6 @@ async function openYaziTerminal() {
     let activeFilePath = "";
     
     // Check for active editor first
-    const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
       const filePath = activeEditor.document.uri.fsPath;
       // Get the directory containing the file
@@ -98,10 +105,26 @@ async function openYaziTerminal() {
     vscode.window.onDidCloseTerminal((terminal) => {
       if (terminal === yaziTerminal) {
         yaziTerminal = undefined;
+        
+        // Focus back on the previously active file
+        focusOnPreviousFile();
       }
     });
   } catch (error) {
     vscode.window.showErrorMessage(`Failed to open Yazi: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// Focus back on the previously active file
+function focusOnPreviousFile() {
+  if (previousActiveFile) {
+    vscode.workspace.openTextDocument(previousActiveFile)
+      .then(doc => {
+        vscode.window.showTextDocument(doc, { preview: false });
+      })
+      .then(undefined, () => {
+        // File might have been closed or deleted, just ignore
+      });
   }
 }
 
