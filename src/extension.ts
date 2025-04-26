@@ -8,6 +8,8 @@ import { exec } from "child_process";
 let yaziTerminal: vscode.Terminal | undefined;
 // Track the active editor before opening Yazi
 let previousActiveFile: vscode.Uri | undefined;
+// Track the chooser file path for the active Yazi instance
+let yaziChooserFilePath: string | undefined;
 
 /* --- Events --- */
 
@@ -38,6 +40,17 @@ export function deactivate() {}
 /* --- Terminal Management --- */
 
 async function openYaziTerminal() {
+  // Prevent opening multiple instances if one is already initializing or present
+  if (yaziTerminal) {
+     // If it exists but isn't focused, the toggle logic might re-trigger this.
+     // For now, let the existing toggle logic handle disposal/recreation.
+     // Alternatively, we could just .show() it, but respecting original intent for now.
+     console.log("Yazi terminal already exists or is being created.");
+     // If just showing: yaziTerminal.show(); return;
+     // If respecting toggle logic: Let the command handle disposal. We might enter here briefly if called rapidly.
+     return; 
+  }
+
   try {
     // Save the current active editor before opening Yazi
     const activeEditor = vscode.window.activeTextEditor;
@@ -66,13 +79,20 @@ async function openYaziTerminal() {
       cwd = vscode.workspace.workspaceFolders[0].uri.fsPath;
     }
 
+    // 1. Generate Temp File Path
+    const tmpDir = os.tmpdir();
+    const uniqueSuffix = `${Date.now()}-${process.pid}`; // Basic unique identifier
+    // Clear any previous path just in case
+    yaziChooserFilePath = undefined; 
+    const currentChooserFilePath = path.join(tmpDir, `yazi-vscode-chooser-${uniqueSuffix}.tmp`);
+
     // Create the yazi command
     let yaziCommand = yaziPath;
-    
-    // Add the active file as an argument to Yazi
     if (activeFilePath) {
       yaziCommand += ` "${activeFilePath}"`;
     }
+    // 2. Add the chooser file argument
+    yaziCommand += ` --chooser-file "${currentChooserFilePath}"`; // Ensure path is quoted
 
     // Get the shell path
     let shellPath: string;
@@ -91,24 +111,80 @@ async function openYaziTerminal() {
     yaziTerminal = vscode.window.createTerminal({
       name: "Yazi",
       cwd: cwd,
-      shellPath: shellPath,
+      shellPath: process.platform === "win32" ? "cmd.exe" : shellPath, // Use cmd.exe on Windows
       shellArgs:
         process.platform === "win32"
-          ? ["/c", yaziCommand]
+          ? ["/c", yaziCommand] // cmd /c should handle the command string correctly
           : ["-c", yaziCommand],
       location: vscode.TerminalLocation.Editor
     });
 
+    // Assign the chooser path *after* successfully creating the terminal
+    // This instance will use currentChooserFilePath
+    yaziChooserFilePath = currentChooserFilePath; 
+
     yaziTerminal.show();
 
     // Handle terminal close
-    vscode.window.onDidCloseTerminal((terminal) => {
+    // Capture the path for this specific terminal instance closure
+    const closeSubscription = vscode.window.onDidCloseTerminal(async (terminal) => {
+      // Ensure we are handling the closure of the correct Yazi terminal instance
       if (terminal === yaziTerminal) {
+        let openedFileFromYazi = false;
+        const associatedChooserPath = yaziChooserFilePath; // Read the path associated at the time of closure setup
+
+        // Check if the chooser file exists and process it
+        if (associatedChooserPath && fs.existsSync(associatedChooserPath)) {
+          let chosenFilePath = '';
+          try {
+            chosenFilePath = fs.readFileSync(associatedChooserPath, "utf8").trim();
+            // Clean up immediately after reading
+            try { fs.unlinkSync(associatedChooserPath); } catch (unlinkErr) { /* ignore */ } 
+
+            if (chosenFilePath) {
+              const fileUri = vscode.Uri.file(chosenFilePath);
+              try {
+                const doc = await vscode.workspace.openTextDocument(fileUri);
+                await vscode.window.showTextDocument(doc, { preview: false });
+                openedFileFromYazi = true; // Mark success
+              } catch (openErr) {
+                console.error(`Error opening file selected from Yazi: ${openErr}`);
+                vscode.window.showErrorMessage(`Failed to open: ${chosenFilePath}`);
+              }
+            }
+          } catch (err) {
+            console.error(`Error processing Yazi chooser file: ${err}`);
+            vscode.window.showWarningMessage(`Could not process file path from Yazi.`);
+            // Attempt cleanup even if reading failed
+            try {
+              if (fs.existsSync(associatedChooserPath)) {
+                fs.unlinkSync(associatedChooserPath);
+              }
+            } catch (unlinkErr) { /* ignore */ }
+          }
+        }
+
+        // Reset terminal state associated with this instance
         yaziTerminal = undefined;
-        focusOnPreviousFile();
+        // Important: Only clear the global yaziChooserFilePath if it *still* matches the one from this instance.
+        // This avoids race conditions if a new terminal was opened very quickly.
+        if (yaziChooserFilePath === associatedChooserPath) {
+            yaziChooserFilePath = undefined;
+        }
+
+        // Focus on the previous file ONLY if Yazi didn't open a new one
+        if (!openedFileFromYazi) {
+          focusOnPreviousFile();
+        }
+
+        // Dispose the listener associated with *this* terminal instance closure
+        closeSubscription.dispose();
       }
     });
   } catch (error) {
+    // Reset terminal state on error too
+    yaziTerminal = undefined; 
+    yaziChooserFilePath = undefined;
     vscode.window.showErrorMessage(`Failed to open Yazi: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
