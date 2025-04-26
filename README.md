@@ -2,6 +2,8 @@
 
 Native integration of Yazi directly in a VSCode window (not an integrated terminal)
 
+![Yazi for VSCode Demo](./assets/demo.png)
+
 ## Features
 
 - Toggle Yazi in the full-screen editor within VSCode
