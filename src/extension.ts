@@ -106,8 +106,16 @@ async function openYaziTerminal() {
       if (terminal === yaziTerminal) {
         yaziTerminal = undefined;
         
-        // Focus back on the previously active file
-        focusOnPreviousFile();
+        // Only focus back if we didn't likely just open a file from Yazi.
+        // If previousActiveFile is set, it means we likely launched Yazi
+        // from an editor, and pressing Enter in Yazi to open a file
+        // would have closed the terminal and VS Code likely focused the new file.
+        // If previousActiveFile is *not* set, Yazi might have been closed manually (e.g., 'q').
+        if (!previousActiveFile) {
+          focusOnPreviousFile(); // Try to focus the *original* file if Yazi was closed manually
+        }
+        // Reset previousActiveFile after handling the closure
+        previousActiveFile = undefined; 
       }
     });
   } catch (error) {
