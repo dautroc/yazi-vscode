@@ -87,12 +87,11 @@ async function openYaziTerminal() {
     const currentChooserFilePath = path.join(tmpDir, `yazi-vscode-chooser-${uniqueSuffix}.tmp`);
 
     // Create the yazi command
-    let yaziCommand = yaziPath;
+    let yaziArgs: string[] = [];
     if (activeFilePath) {
-      yaziCommand += ` "${activeFilePath}"`;
+      yaziArgs.push(activeFilePath);
     }
-    // 2. Add the chooser file argument
-    yaziCommand += ` --chooser-file "${currentChooserFilePath}"`; // Ensure path is quoted
+    yaziArgs.push("--chooser-file", currentChooserFilePath);
 
     // Get the shell path
     let shellPath: string;
@@ -114,8 +113,8 @@ async function openYaziTerminal() {
       shellPath: process.platform === "win32" ? "cmd.exe" : shellPath, // Use cmd.exe on Windows
       shellArgs:
         process.platform === "win32"
-          ? ["/c", yaziCommand] // cmd /c should handle the command string correctly
-          : ["-c", yaziCommand],
+          ? ["/c", yaziPath, ...yaziArgs.map(arg => `"${arg}"`)] // Pass args separately, ensure they are quoted
+          : ["-c", `${yaziPath} ${yaziArgs.map(arg => `"${arg}"`).join(" ")}`], // Non-windows keeps original structure for now
       location: vscode.TerminalLocation.Editor
     });
 
