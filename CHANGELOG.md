@@ -1,3 +1,11 @@
+## [1.0.8](https://github.com/dautroc/yazi-vscode/compare/v1.0.7...v1.0.8) (2025-06-02)
+
+
+### Bug Fixes
+
+* **file path:** fix file path parsing incorrectly ([bdcb04f](https://github.com/dautroc/yazi-vscode/commit/bdcb04fc2eb122d54ab06a820cc79f4622f74c7e))
+* **path:** making yazi direct shell path and passing its arg via shellArgs ([1e3a7ca](https://github.com/dautroc/yazi-vscode/commit/1e3a7ca3a9a1ad043ddeb54b26b9104f9cb20b5d))
+
 # Changelog
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
