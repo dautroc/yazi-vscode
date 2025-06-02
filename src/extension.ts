@@ -86,37 +86,21 @@ async function openYaziTerminal() {
     yaziChooserFilePath = undefined; 
     const currentChooserFilePath = path.join(tmpDir, `yazi-vscode-chooser-${uniqueSuffix}.tmp`);
 
-    // Create the yazi command
-    let yaziCommand = yaziPath;
+    // Create the yazi arguments
+    const yaziProcessArgs: string[] = [];
     if (activeFilePath) {
-      yaziCommand += ` "${activeFilePath}"`;
+      yaziProcessArgs.push(activeFilePath);
     }
-    // 2. Add the chooser file argument
-    yaziCommand += ` --chooser-file "${currentChooserFilePath}"`; // Ensure path is quoted
-
-    // Get the shell path
-    let shellPath: string;
-    try {
-      shellPath = process.platform === "win32" 
-        ? "powershell.exe" 
-        : await findExecutableOnPath("bash");
-    } catch (error) {
-      // Fallback to system shell if bash is not found
-      shellPath = process.platform === "win32" 
-        ? "powershell.exe" 
-        : "/bin/sh";
-    }
+    yaziProcessArgs.push("--chooser-file");
+    yaziProcessArgs.push(currentChooserFilePath);
 
     // Create the terminal
     yaziTerminal = vscode.window.createTerminal({
       name: "Yazi",
+      shellPath: yaziPath, // Use yazi executable directly as shellPath
+      shellArgs: yaziProcessArgs, // Pass arguments directly
       cwd: cwd,
-      shellPath: process.platform === "win32" ? "cmd.exe" : shellPath, // Use cmd.exe on Windows
-      shellArgs:
-        process.platform === "win32"
-          ? ["/c", yaziCommand] // cmd /c should handle the command string correctly
-          : ["-c", yaziCommand],
-      location: vscode.TerminalLocation.Editor
+      location: vscode.TerminalLocation.Editor,
     });
 
     // Assign the chooser path *after* successfully creating the terminal
