@@ -1,3 +1,10 @@
+## [1.0.9](https://github.com/dautroc/yazi-vscode/compare/v1.0.8...v1.0.9) (2025-06-30)
+
+
+### Bug Fixes
+
+* **closing behaviour:** leave editor group empty after closing Yazi ([3ac4dd8](https://github.com/dautroc/yazi-vscode/commit/3ac4dd845ada8f846c893344e64096151ec16606))
+
 ## [1.0.8](https://github.com/dautroc/yazi-vscode/compare/v1.0.7...v1.0.8) (2025-06-02)
 
 
