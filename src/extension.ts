@@ -56,6 +56,9 @@ async function openYaziTerminal() {
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor) {
       previousActiveFile = activeEditor.document.uri;
+    } else {
+      // Clear previousActiveFile when no active editor
+      previousActiveFile = undefined;
     }
     
     // Get the Yazi path
@@ -158,7 +161,11 @@ async function openYaziTerminal() {
 
         // Focus on the previous file ONLY if Yazi didn't open a new one
         if (!openedFileFromYazi) {
-          focusOnPreviousFile();
+          if (isCurrentEditorGroupEmpty()) {
+            focusFirstNonEmptyGroup();
+          } else {
+            focusOnPreviousFile();
+          }
         }
 
         // Dispose the listener associated with *this* terminal instance closure
@@ -170,6 +177,31 @@ async function openYaziTerminal() {
     yaziTerminal = undefined; 
     yaziChooserFilePath = undefined;
     vscode.window.showErrorMessage(`Failed to open Yazi: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function isCurrentEditorGroupEmpty(): boolean {
+  const activeGroup = vscode.window.tabGroups.activeTabGroup;
+  // Count non-terminal tabs only (terminal tabs will be removed when terminal closes)
+  const nonTerminalTabs = activeGroup.tabs.filter(tab => 
+    !(tab.input instanceof vscode.TabInputTerminal)
+  );
+  return nonTerminalTabs.length === 0;
+}
+
+function focusFirstNonEmptyGroup() {
+  const tabGroups = vscode.window.tabGroups.all;
+  
+  const nonEmptyGroup = tabGroups.find(group => group.tabs.length > 0);
+  
+  if (nonEmptyGroup && nonEmptyGroup !== vscode.window.tabGroups.activeTabGroup) {
+    const firstTab = nonEmptyGroup.tabs[0];
+    if (firstTab.input instanceof vscode.TabInputText) {
+      vscode.window.showTextDocument(firstTab.input.uri, { 
+        viewColumn: nonEmptyGroup.viewColumn,
+        preview: false 
+      });
+    }
   }
 }
 
@@ -215,17 +247,22 @@ function isYaziTerminalFocused(): boolean {
 }
 
 function closeYaziTerminal() {
-  const openTabs = vscode.window.tabGroups.all.flatMap(
-    (group) => group.tabs
-  ).length;
-  if (openTabs === 1 && yaziTerminal) {
-    // only yazi tab, close
+  const activeGroup = vscode.window.tabGroups.activeTabGroup;
+  const tabsInGroup = activeGroup.tabs.length;
+  
+  if (tabsInGroup === 1 && yaziTerminal) {
+    // only yazi tab in this group, close it
     yaziTerminal.dispose();
   } else {
-    // toggle recently used tab in group
+    // toggle to recently used tab in group, then close yazi
     vscode.commands.executeCommand(
       "workbench.action.openPreviousRecentlyUsedEditorInGroup"
-    );
+    ).then(() => {
+      // After switching tabs, dispose the terminal
+      if (yaziTerminal) {
+        yaziTerminal.dispose();
+      }
+    });
   }
 }
 
