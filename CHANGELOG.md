@@ -1,3 +1,10 @@
+## [1.0.10](https://github.com/dautroc/yazi-vscode/compare/v1.0.9...v1.0.10) (2024-11-19)
+
+
+### Bug Fixes
+
+* **terminal handling:** improve terminal closure and file path handling ([0400490](https://github.com/dautroc/yazi-vscode/commit/0400490d89d889a97847a4f2c46fe01ae9dbfa05))
+
 ## [1.0.9](https://github.com/dautroc/yazi-vscode/compare/v1.0.8...v1.0.9) (2025-06-30)
 
 
