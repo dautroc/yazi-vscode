@@ -129,14 +129,19 @@ async function openYaziTerminal() {
             try { fs.unlinkSync(associatedChooserPath); } catch (unlinkErr) { /* ignore */ } 
 
             if (chosenFilePath) {
-              const fileUri = vscode.Uri.file(chosenFilePath);
-              try {
-                const doc = await vscode.workspace.openTextDocument(fileUri);
-                await vscode.window.showTextDocument(doc, { preview: false });
-                openedFileFromYazi = true; // Mark success
-              } catch (openErr) {
-                console.error(`Error opening file selected from Yazi: ${openErr}`);
-                vscode.window.showErrorMessage(`Failed to open: ${chosenFilePath}`);
+              // Split by newlines to handle multiple file selections
+              const filePaths = chosenFilePath.split('\n').filter(path => path.trim().length > 0);
+
+              for (const filePath of filePaths) {
+                const fileUri = vscode.Uri.file(filePath.trim());
+                try {
+                  const doc = await vscode.workspace.openTextDocument(fileUri);
+                  await vscode.window.showTextDocument(doc, { preview: false });
+                  openedFileFromYazi = true; // Mark success
+                } catch (openErr) {
+                  console.error(`Error opening file selected from Yazi: ${openErr}`);
+                  vscode.window.showErrorMessage(`Failed to open: ${filePath}`);
+                }
               }
             }
           } catch (err) {
