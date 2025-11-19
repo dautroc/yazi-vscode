@@ -1,3 +1,10 @@
+## [1.0.10](https://github.com/dautroc/yazi-vscode/compare/v1.0.9...v1.0.10) (2024-11-19)
+
+
+### Bug Fixes
+
+* **multiple file open:** fix yazi cannot open multiple files ([6b8524d](https://github.com/dautroc/yazi-vscode/commit/6b8524d27320d9450cfce66eae07a869293ea603))
+
 ## [1.0.9](https://github.com/dautroc/yazi-vscode/compare/v1.0.8...v1.0.9) (2025-06-30)
 
 
